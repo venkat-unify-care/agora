@@ -1,0 +1,17 @@
+[
+    {
+        "timestamp": "2025-04-15T19:06:26.855688",
+        "question": "",
+        "answer": "Yeah.\n"
+    },
+    {
+        "timestamp": "2025-04-15T19:06:53.077230",
+        "question": "Good day, and thank you for joining this interview. Let's start with our first question on JavaScript:\n\n1. Could you explain the concept of closures in JavaScript and provide an example of how they might be used in a real-world scenario?\n\nPlease take your time to answer, and let me know if you'd like to confirm your response before we move on to the next question.",
+        "answer": "e eixar.\n"
+    },
+    {
+        "timestamp": "2025-04-15T19:07:21.779420",
+        "question": "Thank you for confirming. Let's proceed to the next question, which focuses on Data Structures:\n\n2. How would you implement a stack using JavaScript? Please describe the key operations and their time complexities. \n\nAgain, feel free to confirm your answer before we continue to the following question.",
+        "answer": "Okay, can you test my react.js skills?\n"
+    }
+]
