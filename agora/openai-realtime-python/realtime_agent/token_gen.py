@@ -39,7 +39,7 @@ def generate_token(channel, uid: int = None) -> TokenResponse:
             appCertificate=app_cert,
             channelName=channel_name,
             uid=uid,
-            role=1,
+            role=0,
             privilegeExpiredTs=expiration_time
         )
         return TokenResponse(token=token, uid=str(uid), channel=channel_name)
