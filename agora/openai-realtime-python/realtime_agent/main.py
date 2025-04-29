@@ -35,6 +35,7 @@ class StartAgentRequestBody(BaseModel):
     language: str = Field("en", description="The language of the agent")
     system_instruction: str = Field("", description="The system instruction for the agent")
     voice: str = Field("alloy", description="The voice of the agent")
+    token: str = Field(..., description="The token of the user")
 
 
 class StopAgentRequestBody(BaseModel):
@@ -67,8 +68,9 @@ def run_agent_in_process(
     engine_app_id: str,
     engine_app_cert: str,
     channel_name: str,
-    uid: int,
+    uid: str,
     inference_config: InferenceConfig,
+    token: str,
 ):  # Set up signal forwarding in the child process
     signal.signal(signal.SIGINT, handle_agent_proc_signal)  # Forward SIGINT
     signal.signal(signal.SIGTERM, handle_agent_proc_signal)  # Forward SIGTERM
@@ -80,7 +82,7 @@ def run_agent_in_process(
                 uid=uid,
                 sample_rate=PCM_SAMPLE_RATE,
                 channels=PCM_CHANNELS,
-                enable_pcm_dump= os.environ.get("WRITE_RTC_PCM", "false") == "true"
+                # enable_pcm_dump= os.environ.get("WRITE_RTC_PCM", "false") == "true"
             ),
             inference_config=inference_config,
             tools=None,
@@ -107,6 +109,7 @@ async def start_agent(request):
         language = validated_data.language
         system_instruction = validated_data.system_instruction
         voice = validated_data.voice
+        token = validated_data.token
 
         # Check if a process is already running for the given channel_name
         if (
@@ -196,7 +199,7 @@ async def start_agent(request):
         # Create a new process for running the agent
         process = Process(
             target=run_agent_in_process,
-            args=(app_id, app_cert, channel_name, uid, inference_config),
+            args=(app_id, app_cert, channel_name, uid, inference_config, token),
         )
 
         try:
@@ -456,10 +459,10 @@ if __name__ == "__main__":
                 type="server_vad", threshold=0.5, prefix_padding_ms=300, silence_duration_ms=200
             ),
         )
-        run_agent_in_process(
-            engine_app_id=app_id,
-            engine_app_cert=app_cert,
-            channel_name=realtime_kit_options["channel_name"],
-            uid=realtime_kit_options["uid"],
-            inference_config=inference_config,
-        )
+        # run_agent_in_process(
+        #     engine_app_id=app_id,
+        #     engine_app_cert=app_cert,
+        #     channel_name=realtime_kit_options["channel_name"],
+        #     uid=realtime_kit_options["uid"],
+        #     inference_config=inference_config,
+        # )

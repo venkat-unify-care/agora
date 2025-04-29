@@ -28,6 +28,7 @@ class AudioFormats(str, Enum):
     PCM16 = "pcm16"
     G711_ULAW = "g711_ulaw"
     G711_ALAW = "g711_alaw"
+    VP9 = "vp9"
 
 class ItemType(str, Enum):
     Message = "message"

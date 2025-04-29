@@ -17,7 +17,7 @@ from langchain_core.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
 
 from .logger import setup_logger
-from .realtime.struct import ErrorMessage, FunctionCallOutputItemParam, InputAudioBufferCommitted, InputAudioBufferSpeechStarted, InputAudioBufferSpeechStopped, InputAudioTranscription, ItemCreate, ItemCreated, ItemInputAudioTranscriptionCompleted, RateLimitsUpdated, ResponseAudioDelta, ResponseAudioDone, ResponseAudioTranscriptDelta, ResponseAudioTranscriptDone, ResponseContentPartAdded, ResponseContentPartDone, ResponseCreate, ResponseCreated, ResponseDone, ResponseFunctionCallArgumentsDelta, ResponseFunctionCallArgumentsDone, ResponseOutputItemAdded, ResponseOutputItemDone, ServerVADUpdateParams, SessionUpdate, SessionUpdateParams, SessionUpdated, Voices, to_json
+from .realtime.struct import ErrorMessage, FunctionCallOutputItemParam, InputAudioBufferCommitted, InputAudioBufferSpeechStarted, InputAudioBufferSpeechStopped, InputAudioTranscription, ItemCreate, ItemCreated, ItemInputAudioTranscriptionCompleted, RateLimitsUpdated, ResponseAudioDelta, ResponseAudioDone, ResponseAudioTranscriptDelta, ResponseAudioTranscriptDone, ResponseContentPartAdded, ResponseContentPartDone, ResponseCreate, ResponseCreateParams, ResponseCreated, ResponseDone, ResponseFunctionCallArgumentsDelta, ResponseFunctionCallArgumentsDone, ResponseOutputItemAdded, ResponseOutputItemDone, ServerVADUpdateParams, SessionUpdate, SessionUpdateParams, SessionUpdated, Voices, to_json, ItemParam, UserMessageItemParam
 from .realtime.connection import RealtimeApiConnection
 from .tools import ClientToolCallResponse, ToolContext
 from .utils import PCMWriter
@@ -85,7 +85,14 @@ class RealtimeKitAgent:
         inference_config: InferenceConfig,
         tools: ToolContext | None,
     ) -> None:
+        print(options)
         channel = engine.create_channel(options)
+        
+        # Configure audio settings
+        options.sample_rate = 24000  # Match model output sample rate
+        options.channels = 1  # Mono audio
+        options.audio_format = "pcm16"  # PCM16 format
+        
         await channel.connect()
 
         try:
@@ -181,7 +188,7 @@ class RealtimeKitAgent:
                 logger.info(f"Received stream message with length: {length}")
 
             self.channel.on("stream_message", on_stream_message)
-
+            
             logger.info("Waiting for remote user to join")
             log_file_path = "conversation_log.json"
             if os.path.exists(log_file_path):
@@ -191,6 +198,19 @@ class RealtimeKitAgent:
             self.subscribe_user = await wait_for_remote_user(self.channel)
             logger.info(f"Subscribing to user {self.subscribe_user}")
             await self.channel.subscribe_audio(self.subscribe_user)
+
+            # # Send welcome message
+            # await self.connection.send_request(
+            #     ResponseCreate(
+            #         response=ResponseCreateParams(
+            #             input_items=[
+            #                 UserMessageItemParam(
+            #                     content=[{"type": "text", "text": "Hello! I'm your AI interviewer. Can you please tell me about yourself?"}]
+            #                 )
+            #             ]
+            #         )
+            #     )
+            # )
 
             async def on_user_left(
                 agora_rtc_conn: RTCConnection, user_id: int, reason: int
@@ -229,10 +249,13 @@ class RealtimeKitAgent:
             raise
 
     async def rtc_to_model(self) -> None:
+        logger.info("Starting rtc_to_model task")
         while self.subscribe_user is None or self.channel.get_audio_frames(self.subscribe_user) is None:
+            logger.info(f"Waiting for subscribe_user: {self.subscribe_user}, audio_frames: {self.channel.get_audio_frames(self.subscribe_user) is not None}")
             await asyncio.sleep(0.1)
 
         audio_frames = self.channel.get_audio_frames(self.subscribe_user)
+        logger.info(f"Got audio frames for user {self.subscribe_user}")
 
         # Initialize PCMWriter for receiving audio
         pcm_writer = PCMWriter(prefix="rtc_to_model", write_pcm=self.write_pcm)
@@ -241,7 +264,9 @@ class RealtimeKitAgent:
             async for audio_frame in audio_frames:
                 # Process received audio (send to model)
                 _monitor_queue_size(self.audio_queue, "audio_queue")
+                logger.info(f"Received audio frame from RTC, size: {len(audio_frame.data)} bytes")
                 await self.connection.send_audio_data(audio_frame.data)
+                logger.info("Sent audio data to model")
 
                 # Write PCM data if enabled
                 await pcm_writer.write(audio_frame.data)
@@ -252,18 +277,26 @@ class RealtimeKitAgent:
             # Write any remaining PCM data before exiting
             await pcm_writer.flush()
             raise  # Re-raise the exception to propagate cancellation
+        except Exception as e:
+            logger.error(f"Error in rtc_to_model: {e}")
+            raise
 
     async def model_to_rtc(self) -> None:
         # Initialize PCMWriter for sending audio
         pcm_writer = PCMWriter(prefix="model_to_rtc", write_pcm=self.write_pcm)
+        logger.info("Starting model_to_rtc task")
 
         try:
             while True:
                 # Get audio frame from the model output
+                logger.info("Waiting for audio frame from queue")
                 frame = await self.audio_queue.get()
+                logger.info(f"Received audio frame of size: {len(frame)} bytes")
 
                 # Process sending audio (to RTC)
+                logger.info("Pushing audio frame to RTC channel")
                 await self.channel.push_audio_frame(frame)
+                logger.info("Audio frame pushed to RTC channel")
 
                 # Write PCM data if enabled
                 await pcm_writer.write(frame)
@@ -272,6 +305,9 @@ class RealtimeKitAgent:
             # Write any remaining PCM data before exiting
             await pcm_writer.flush()
             raise  # Re-raise the cancelled exception to properly exit the task
+        except Exception as e:
+            logger.error(f"Error in model_to_rtc: {e}")
+            raise
 
     async def handle_funtion_call(self, message: ResponseFunctionCallArgumentsDone) -> None:
         function_call_response = await self.tools.execute_tool(message.name, message.arguments)
@@ -289,11 +325,14 @@ class RealtimeKitAgent:
         )
 
     async def _process_model_messages(self) -> None:
+        logger.info("Starting _process_model_messages task")
         async for message in self.connection.listen():
             # logger.info(f"Received message {message=}")
+            logger.info(f"Received message type: {type(message).__name__}")
             match message:
                 case ResponseAudioDelta():
                     # logger.info("Received audio message")
+                    logger.info(f"Received audio delta: response_id:{message.response_id}, item_id:{message.item_id}, delta length:{len(message.delta)}")
                     self.audio_queue.put_nowait(base64.b64decode(message.delta))
                     # loop.call_soon_threadsafe(self.audio_queue.put_nowait, base64.b64decode(message.delta))
                     logger.debug(f"TMS:ResponseAudioDelta: response_id:{message.response_id},item_id: {message.item_id}")

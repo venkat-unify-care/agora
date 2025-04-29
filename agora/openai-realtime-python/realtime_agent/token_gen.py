@@ -1,9 +1,11 @@
 import os
 import random
 import string
+import requests
 from datetime import datetime
 from agora_token_builder import RtcTokenBuilder
 from dotenv import load_dotenv
+
 load_dotenv(override=True)
 class TokenResponse:
     def __init__(self, token: str, uid: str, channel: str):
@@ -23,25 +25,36 @@ def generate_random_uid() -> int:
 #     return f"ai-conversation-{timestamp}-{random_str}"
 
 def generate_token(channel, uid: int = None) -> TokenResponse:
-    app_id = os.environ.get("AGORA_APP_ID")
-    app_cert = os.environ.get("AGORA_APP_CERT")
+    # app_id = os.environ.get("AGORA_APP_ID")
+    # app_cert = os.environ.get("AGORA_APP_CERT")
 
-    if not app_id or not app_cert:
-        raise ValueError("AGORA_APP_ID and AGORA_APP_CERTIFICATE must be set in environment variables.")
+    # if not app_id or not app_cert:
+    #     raise ValueError("AGORA_APP_ID and AGORA_APP_CERTIFICATE must be set in environment variables.")
 
-    uid = uid if uid else generate_random_uid()
-    channel_name = channel
-    expiration_time = int(datetime.now().timestamp()) + 3600  # valid for 1 hour
+    # uid = uid if uid else generate_random_uid()
+    # channel_name = channel
+    # expiration_time = int(datetime.now().timestamp()) + 3600  # valid for 1 hour
 
-    try:
-        token = RtcTokenBuilder.buildTokenWithUid(
-            appId=app_id,
-            appCertificate=app_cert,
-            channelName=channel_name,
-            uid=uid,
-            role=0,
-            privilegeExpiredTs=expiration_time
-        )
-        return TokenResponse(token=token, uid=str(uid), channel=channel_name)
-    except Exception as e:
-        raise RuntimeError(f"Failed to generate Agora token: {str(e)}")
+    # try:
+    #     token = RtcTokenBuilder.buildTokenWithUid(
+    #         appId=app_id,
+    #         appCertificate=app_cert,
+    #         channelName=channel_name,
+    #         uid=uid,
+    #         role=1,
+    #         privilegeExpiredTs=expiration_time
+    #     )
+    #     return TokenResponse(token=token, uid=str(uid), channel=channel_name)
+    # except Exception as e:
+    #     raise RuntimeError(f"Failed to generate Agora token: {str(e)}")
+    data = {
+        "channelId": channel,
+        "body": {
+            "callerName": "Rufous AI",
+        }
+    }
+    headers={"Content-Type": "application/json"}
+    response = requests.post("https://dev.rufous.com/api/notification/joinVideocall?isAnonymous=true", json=data,
+        headers=headers,
+    )
+    return response.json()

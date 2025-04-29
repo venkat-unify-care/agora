@@ -32,11 +32,10 @@ async def start_bot(input_request: InputRequest):
         raise HTTPException(status_code=400, detail="channel_name is required")
     
     response=generate_token(input_request.channel_name)
-
     payload = {
-            "uid": response.uid,
+            "uid": response['uid'],
             "channel_name": input_request.channel_name,
-            "token": response.token
+            "token": response['token']
     }
     print("Got the payload!!!")
     print(payload)
