@@ -62,8 +62,17 @@ class RealtimeError:
     event_id: Optional[str] = None  # Optional event ID for tracing
 
 @dataclass
+class GoogleSTTConfig:
+    language_code: str = "en-US"
+    enable_automatic_punctuation: bool = True
+    use_enhanced_model: bool = True
+
+@dataclass
 class InputAudioTranscription:
-    model: str = "whisper-1"  # Default transcription model is "whisper-1"
+    model: str = "whisper-1"  # Changed from "whisper-1" to "google-speech"
+    # config: Optional[GoogleSTTConfig] = field(
+    #     default_factory=lambda: GoogleSTTConfig()
+    # )
 
 @dataclass
 class ServerVADUpdateParams:
@@ -71,6 +80,7 @@ class ServerVADUpdateParams:
     prefix_padding_ms: Optional[int] = None  # Amount of padding before the voice starts (in milliseconds)
     silence_duration_ms: Optional[int] = None  # Duration of silence before considering speech stopped (in milliseconds)
     type: str = "server_vad"  # Fixed value for VAD type
+
 @dataclass
 class Session:
     id: str  # The unique identifier for the session
@@ -83,7 +93,7 @@ class Session:
     turn_detection: Optional[ServerVADUpdateParams] = None  # Voice activity detection (VAD) settings
     input_audio_format: AudioFormats = AudioFormats.PCM16  # Audio format for input (e.g., "pcm16")
     output_audio_format: AudioFormats = AudioFormats.PCM16  # Audio format for output (e.g., "pcm16")
-    input_audio_transcription: Optional[InputAudioTranscription] = None  # Audio transcription model settings (e.g., "whisper-1")
+    input_audio_transcription: Optional[InputAudioTranscription] = None  # Audio transcription model settings
     tools: List[Dict[str, Union[str, Any]]] = field(default_factory=list)  # List of tools available during the session
     tool_choice: Literal["auto", "none", "required"] = "auto"  # How tools should be used in the session
     temperature: float = 0.8  # Temperature setting for model creativity
@@ -674,7 +684,38 @@ def parse_client_message(unparsed_string: str) -> ClientToServerMessage:
 
 
 # Assuming all necessary classes and enums (EventType, ServerToClientMessages, etc.) are imported
-# Here’s how you can dynamically parse a server-to-client message based on the `type` field:
+# Here's how you can dynamically parse a server-to-client message based on the `type` field:
+
+def parse_client_message(unparsed_string: str) -> ClientToServerMessage:
+    data = json.loads(unparsed_string)
+    
+    # Dynamically select the correct message class based on the `type` field, using from_dict
+    if data["type"] == EventType.INPUT_AUDIO_BUFFER_APPEND:
+        return from_dict(InputAudioBufferAppend, data)
+    elif data["type"] == EventType.INPUT_AUDIO_BUFFER_COMMIT:
+        return from_dict(InputAudioBufferCommit, data)
+    elif data["type"] == EventType.INPUT_AUDIO_BUFFER_CLEAR:
+        return from_dict(InputAudioBufferClear, data)
+    elif data["type"] == EventType.ITEM_CREATE:
+        return from_dict(ItemCreate, data)
+    elif data["type"] == EventType.ITEM_TRUNCATE:
+        return from_dict(ItemTruncate, data)
+    elif data["type"] == EventType.ITEM_DELETE:
+        return from_dict(ItemDelete, data)
+    elif data["type"] == EventType.RESPONSE_CREATE:
+        return from_dict(ResponseCreate, data)
+    elif data["type"] == EventType.RESPONSE_CANCEL:
+        return from_dict(ResponseCancel, data)
+    elif data["type"] == EventType.UPDATE_CONVERSATION_CONFIG:
+        return from_dict(UpdateConversationConfig, data)
+    elif data["type"] == EventType.SESSION_UPDATE:
+        return from_dict(SessionUpdate, data)
+    
+    raise ValueError(f"Unknown message type: {data['type']}")
+
+
+# Assuming all necessary classes and enums (EventType, ServerToClientMessages, etc.) are imported
+# Here's how you can dynamically parse a server-to-client message based on the `type` field:
 
 def parse_server_message(unparsed_string: str) -> ServerToClientMessage:
     data = json.loads(unparsed_string)

@@ -4,14 +4,13 @@ import json
 import logging
 import os
 import aiohttp
-
+from .google_stt import transcribe_audio
 from typing import Any, AsyncGenerator
-from .struct import InputAudioBufferAppend, ClientToServerMessage, ServerToClientMessage, parse_server_message, to_json
+from .struct import InputAudioBufferAppend, ItemCreate, UserMessageItemParam, ClientToServerMessage, ServerToClientMessage, parse_server_message, to_json
 from ..logger import setup_logger
 
 # Set up the logger with color and timestamp support
 logger = setup_logger(name=__name__, log_level=logging.INFO)
-
 
 DEFAULT_VIRTUAL_MODEL = "gpt-4o-realtime-preview"
 
@@ -72,10 +71,20 @@ class RealtimeApiConnection:
         )
 
     async def send_audio_data(self, audio_data: bytes):
-        """audio_data is assumed to be pcm16 24kHz mono little-endian"""
-        base64_audio_data = base64.b64encode(audio_data).decode("utf-8")
-        message = InputAudioBufferAppend(audio=base64_audio_data)
-        await self.send_request(message)
+        """
+        Send audio data to the OpenAI API. This doesn't do any transcription processing.
+        It just forwards the audio data to OpenAI's API.
+        
+        Args:
+            audio_data: PCM audio data (16-bit, 24kHz, mono)
+        """
+        if not audio_data:
+            return
+            
+        # Send the audio data through the InputAudioBufferAppend message
+        await self.send_request(InputAudioBufferAppend(
+            audio=base64.b64encode(audio_data).decode("utf-8")
+        ))
 
     async def send_request(self, message: ClientToServerMessage):
         assert self.websocket is not None
@@ -83,8 +92,6 @@ class RealtimeApiConnection:
         if self.verbose:
             logger.info(f"-> {smart_str(message_str)}")
         await self.websocket.send_str(message_str)
-
-    
 
     async def listen(self) -> AsyncGenerator[ServerToClientMessage, None]:
         assert self.websocket is not None
@@ -107,7 +114,7 @@ class RealtimeApiConnection:
             return parse_server_message(message)
         except Exception as e:
             logger.error("Error handling message: " + str(e))
-            #raise e
+            raise
 
     async def close(self):
         # Close the websocket connection if it exists
